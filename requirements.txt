@@ -7,6 +7,5 @@ matplotlib
 plotly
 requests
 python-dotenv
-imaplib
 beautifulsoup4
 transformers
