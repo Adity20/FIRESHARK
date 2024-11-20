@@ -102,7 +102,8 @@ def generate_attack_report(df):
 API_KEY = os.getenv("API_KEY")
 def lookup_input(input_value):
     """
-    Lookup an IP Address, Domain Name, or Subnet using the AbuseIPDB API.
+    Lookup an IP Address or Subnet using the AbuseIPDB API.
+    For domains, resolve them to an IP address first.
     """
     api_url = "https://api.abuseipdb.com/api/v2/check"
     headers = {
@@ -114,28 +115,34 @@ def lookup_input(input_value):
         "maxAgeInDays": 90  # Look back for up to 90 days of abuse reports
     }
     
-    if "/" in input_value:
-        params["ipAddress"] = input_value
-    elif "." in input_value and not input_value.replace(".", "").isdigit():
-        params["domain"] = input_value
-    else:
-        params["ipAddress"] = input_value
+    try:
+        if "/" in input_value:  # Check if it's a subnet
+            params["ipAddress"] = input_value
+        elif "." in input_value and not input_value.replace(".", "").isdigit():  # Domain name
+            resolved_ip = socket.gethostbyname(input_value)
+            params["ipAddress"] = resolved_ip
+        else:  # Assume it's an IP address
+            params["ipAddress"] = input_value
 
-    response = requests.get(api_url, headers=headers, params=params)
-    
-    if response.status_code == 200:
-        data = response.json().get("data", {})
-        return {
-            "Input": input_value,
-            "Is Malicious": data.get("isPublic", False),
-            "Threat Score": data.get("abuseConfidenceScore", 0),
-            "Last Reported": data.get("lastReportedAt", "Unknown"),
-            "Category": data.get("usageType", "N/A"),
-            "ISP": data.get("isp", "Unknown"),
-            "Country": data.get("countryName", "Unknown")
-        }
-    else:
-        return {"error": f"API request failed with status code {response.status_code}: {response.text}"}
+        response = requests.get(api_url, headers=headers, params=params)
+        if response.status_code == 200:
+            data = response.json().get("data", {})
+            return {
+                "Input": input_value,
+                "Resolved IP": params.get("ipAddress"),
+                "Is Malicious": data.get("isPublic", False),
+                "Threat Score": data.get("abuseConfidenceScore", 0),
+                "Last Reported": data.get("lastReportedAt", "Unknown"),
+                "Category": data.get("usageType", "N/A"),
+                "ISP": data.get("isp", "Unknown"),
+                "Country": data.get("countryName", "Unknown")
+            }
+        else:
+            return {"error": f"API request failed with status code {response.status_code}: {response.text}"}
+    except socket.gaierror:
+        return {"error": "Failed to resolve domain to an IP address."}
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {e}"}
 
 def display_threat_intelligence():
     """
@@ -155,6 +162,7 @@ def display_threat_intelligence():
         else:
             st.write("### Threat Intelligence Results")
             st.write(f"**Input**: {result['Input']}")
+            st.write(f"**Resolved IP**: {result['Resolved IP']}")
             st.write(f"**Is Malicious**: {'Yes' if result['Is Malicious'] else 'No'}")
             st.write(f"**Threat Score**: {result['Threat Score']}")
             st.write(f"**Last Reported**: {result['Last Reported']}")
