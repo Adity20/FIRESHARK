@@ -9,3 +9,4 @@ requests
 python-dotenv
 beautifulsoup4
 transformers
+socket
